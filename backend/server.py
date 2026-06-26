@@ -38,12 +38,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Try to load the default job description text on startup
+DEFAULT_JD_TEXT = ""
+DEFAULT_JD_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Dataset", "job_description.docx")
+if os.path.exists(DEFAULT_JD_PATH):
+    try:
+        doc = docx.Document(DEFAULT_JD_PATH)
+        paragraphs = [p.text for p in doc.paragraphs]
+        DEFAULT_JD_TEXT = "\n".join(paragraphs)
+    except Exception as e:
+        print(f"Error loading default JD text: {e}")
+
+# Load precalculated data if available (e.g. for Hugging Face Spaces instant demo)
+PRECALCULATED_RESULTS_PATH = os.path.join(os.path.dirname(__file__), "precalculated_results.json")
+PRECALCULATED_STATS_PATH = os.path.join(os.path.dirname(__file__), "precalculated_stats.json")
+
+def load_precalculated_data():
+    initial_ranked_results = []
+    initial_stats = None
+    if os.path.exists(PRECALCULATED_RESULTS_PATH) and os.path.exists(PRECALCULATED_STATS_PATH):
+        try:
+            with open(PRECALCULATED_RESULTS_PATH, "r", encoding="utf-8") as f:
+                initial_ranked_results = json.load(f)
+            with open(PRECALCULATED_STATS_PATH, "r", encoding="utf-8") as f:
+                initial_stats = json.load(f)
+        except Exception as e:
+            print(f"Error loading precalculated data: {e}")
+    return initial_ranked_results, initial_stats
+
+initial_ranked_results, initial_stats = load_precalculated_data()
+
 # In-memory storage for current state
 CURRENT_STATE = {
-    "jd_text": "",
-    "jd_spec": {},
+    "jd_text": DEFAULT_JD_TEXT,
+    "jd_spec": JobIntelligenceAgent().analyze_jd(DEFAULT_JD_TEXT) if DEFAULT_JD_TEXT else {},
     "candidates": [], # Raw candidate objects
-    "ranked_results": [], # Scored and ranked candidates
+    "ranked_results": initial_ranked_results, # Scored and ranked candidates
+    "stats": initial_stats, # Precalculated stats
     "weights": {
         "w_tech": 0.40,
         "w_career": 0.25,
@@ -104,6 +135,10 @@ async def upload_jd(file: UploadFile = File(...)):
     job_agent = JobIntelligenceAgent()
     CURRENT_STATE["jd_spec"] = job_agent.analyze_jd(jd_text)
     
+    # Reset precalculated state since user is starting a live demo run
+    CURRENT_STATE["ranked_results"] = []
+    CURRENT_STATE["stats"] = None
+    
     return {
         "message": "Job description uploaded successfully",
         "length": len(jd_text),
@@ -117,13 +152,39 @@ def get_jd():
         "jd_spec": CURRENT_STATE["jd_spec"]
     }
 
+@app.get("/api/stats")
+def get_stats_endpoint():
+    if CURRENT_STATE["stats"]:
+        return CURRENT_STATE["stats"]
+    if CURRENT_STATE["ranked_results"]:
+        return get_stats()
+    return None
+
+@app.post("/api/reset")
+def reset_to_precalculated():
+    initial_ranked_results, initial_stats = load_precalculated_data()
+    CURRENT_STATE["jd_text"] = DEFAULT_JD_TEXT
+    CURRENT_STATE["jd_spec"] = JobIntelligenceAgent().analyze_jd(DEFAULT_JD_TEXT) if DEFAULT_JD_TEXT else {}
+    CURRENT_STATE["candidates"] = []
+    CURRENT_STATE["ranked_results"] = initial_ranked_results
+    CURRENT_STATE["stats"] = initial_stats
+    CURRENT_STATE["weights"] = {
+        "w_tech": 0.40,
+        "w_career": 0.25,
+        "w_culture": 0.20,
+        "w_education": 0.15
+    }
+    CURRENT_STATE["progress"] = {"status": "idle", "percent": 0, "message": ""}
+    return {"message": "Reset to 100K precalculated report successfully"}
+
 @app.post("/api/upload-candidates")
 async def upload_candidates(file: UploadFile = File(...)):
     filename = file.filename
     
-    # Reset candidates
+    # Reset candidates and clear precalculated stats
     CURRENT_STATE["candidates"] = []
     CURRENT_STATE["ranked_results"] = []
+    CURRENT_STATE["stats"] = None
     
     candidates_list = []
     try:

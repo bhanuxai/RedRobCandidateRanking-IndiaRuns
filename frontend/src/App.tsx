@@ -35,6 +35,7 @@ const API_BASE = (window.location.hostname === 'localhost' || window.location.ho
 
 export default function App() {
   const [viewMode, setViewMode] = useState<'dashboard' | 'leaderboard' | 'analytics' | 'compare'>('dashboard');
+  const [isDemoMode, setIsDemoMode] = useState(false);
   const [jdFile, setJdFile] = useState<File | null>(null);
   const [candidatesFile, setCandidatesFile] = useState<File | null>(null);
   const [jdUploaded, setJdUploaded] = useState(false);
@@ -57,12 +58,52 @@ export default function App() {
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [compareDetails, setCompareDetails] = useState<any[]>([]);
 
-  // Load configuration weights from API
+  // Load configuration weights and initial leaderboard/stats/jd from API on startup
   useEffect(() => {
+    // 1. Fetch weights config
     fetch(`${API_BASE}/config`)
       .then(res => res.json())
       .then(data => setWeights(data))
       .catch(err => console.error("Error fetching config:", err));
+
+    // 2. Fetch preloaded JD
+    fetch(`${API_BASE}/jd`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.jd_spec && data.jd_spec.title) {
+          setJdSpec(data.jd_spec);
+          setJdUploaded(true);
+        }
+      })
+      .catch(err => console.error("Error fetching JD:", err));
+
+    // 3. Fetch preloaded leaderboard
+    fetch(`${API_BASE}/leaderboard`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.length > 0) {
+          setLeaderboard(data);
+        }
+      })
+      .catch(err => console.error("Error fetching leaderboard:", err));
+
+    // 4. Fetch preloaded stats
+    fetch(`${API_BASE}/stats`)
+      .then(res => res.json())
+      .then(data => {
+        if (data) {
+          setStats(data);
+          setCandidateCount(data.total_candidates);
+          setCandidatesUploaded(true);
+          setIsDemoMode(false); // Start on precalculated 100K view
+        } else {
+          setIsDemoMode(true);
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching stats:", err);
+        setIsDemoMode(true);
+      });
   }, []);
 
   // Poll progress if ranking is active
@@ -128,6 +169,50 @@ export default function App() {
 
     // We can hit rank endpoint again to get stats if needed, or query stats indirectly
     // For simplicity, we just trigger ranking endpoint to get stats
+  };
+
+  const handleResetTo100K = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/reset`, { method: "POST" });
+      await res.json();
+      
+      setJdFile(null);
+      setCandidatesFile(null);
+      setIsDemoMode(false);
+      
+      // Fetch JD
+      const jdRes = await fetch(`${API_BASE}/jd`);
+      const jdData = await jdRes.json();
+      if (jdData && jdData.jd_spec && jdData.jd_spec.title) {
+        setJdSpec(jdData.jd_spec);
+        setJdUploaded(true);
+      } else {
+        setJdSpec(null);
+        setJdUploaded(false);
+      }
+
+      // Fetch stats
+      const statsRes = await fetch(`${API_BASE}/stats`);
+      const statsData = await statsRes.json();
+      if (statsData) {
+        setStats(statsData);
+        setCandidateCount(statsData.total_candidates);
+        setCandidatesUploaded(true);
+      } else {
+        setStats(null);
+        setCandidateCount(0);
+        setCandidatesUploaded(false);
+      }
+
+      // Fetch leaderboard
+      const lbRes = await fetch(`${API_BASE}/leaderboard`);
+      const lbData = await lbRes.json();
+      setLeaderboard(lbData || []);
+      
+      alert("Reset to official 100K candidates report successfully!");
+    } catch (err) {
+      alert("Failed to reset to 100K report");
+    }
   };
 
   const handleJdUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,113 +384,242 @@ export default function App() {
 
             {/* Steps & Config Panels */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Step 1: Upload mandates */}
+              {/* Left Column: Demo Upload or 100K Stats Report */}
               <div className="lg:col-span-2 space-y-8">
-                <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-6">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-                    <FileText className="w-5 h-5 text-purple-400" /> Upload Hiring Mandates
-                  </h2>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Job Description Upload */}
-                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${jdUploaded ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-850 hover:border-purple-500/40 bg-slate-950/40'}`}>
-                      <label className="cursor-pointer block space-y-4">
-                        <input type="file" onChange={handleJdUpload} accept=".docx,.txt,.md" className="hidden" />
-                        <div className="mx-auto w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
-                          {jdUploaded ? <CheckCircle className="w-6 h-6 text-emerald-400" /> : <FileText className="w-6 h-6 text-purple-400" />}
-                        </div>
-                        <div>
-                          <p className="font-medium text-white">{jdFile ? jdFile.name : 'Job Description'}</p>
-                          <p className="text-xs text-slate-400 mt-1">Accepts .docx, .txt, .md</p>
-                        </div>
-                      </label>
+                {!isDemoMode ? (
+                  /* 100K Precalculated Stats View */
+                  <div className="space-y-8">
+                    {/* Mode Banner */}
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-6 bg-gradient-to-r from-purple-950/40 to-indigo-950/40 border border-purple-500/20 rounded-xl shadow-md">
+                      <div>
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse"></span>
+                          Official 100K Candidates Report Mode
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                          Showing verified results for the full 100,000 candidate dataset ranked on CPU in 53s.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setIsDemoMode(true)}
+                        className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium text-sm transition-all cursor-pointer shadow-md flex items-center gap-2 whitespace-nowrap self-stretch md:self-auto justify-center animate-pulse"
+                      >
+                        🔬 Try Live Custom Demo
+                      </button>
                     </div>
 
-                    {/* Candidate Pool Upload */}
-                    <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${candidatesUploaded ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-850 hover:border-purple-500/40 bg-slate-950/40'}`}>
-                      <label className="cursor-pointer block space-y-4">
-                        <input type="file" onChange={handleCandidatesUpload} accept=".json,.jsonl" className="hidden" />
-                        <div className="mx-auto w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
-                          {candidatesUploaded ? <CheckCircle className="w-6 h-6 text-emerald-400" /> : <Users className="w-6 h-6 text-purple-400" />}
+                    {/* Stats Summary Cards */}
+                    {stats && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 flex items-center gap-4">
+                          <div className="bg-purple-500/10 text-purple-400 p-3 rounded-lg border border-purple-500/20 animate-fade-in">
+                            <Users className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-400 block">Candidates Scored</span>
+                            <p className="text-2xl font-bold text-white mt-0.5">{stats.total_candidates.toLocaleString()}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-white">{candidatesFile ? candidatesFile.name : 'Candidate Database'}</p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            {candidatesUploaded ? `Loaded ${candidateCount.toLocaleString()} candidates` : 'Accepts .json, .jsonl (100K Pool)'}
-                          </p>
+                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 flex items-center gap-4">
+                          <div className="bg-emerald-500/10 text-emerald-400 p-3 rounded-lg border border-emerald-500/20">
+                            <TrendingUp className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-400 block">Top 100 Avg Score</span>
+                            <p className="text-2xl font-bold text-emerald-400 mt-0.5">{stats.top_100_avg_score.toFixed(4)}</p>
+                          </div>
                         </div>
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* Summary of uploaded items */}
-                  {jdUploaded && jdSpec && (
-                    <div className="bg-slate-950/80 border border-slate-850 rounded-lg p-4 space-y-3">
-                      <p className="text-sm font-semibold text-white">Parsed Target Role:</p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                        <div>
-                          <span className="text-slate-400">Target Role:</span>
-                          <p className="font-semibold text-purple-400 mt-0.5">{jdSpec.title}</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">Experience Range:</span>
-                          <p className="font-semibold text-white mt-0.5">{jdSpec.experience_range[0]} - {jdSpec.experience_range[1]} Years</p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">Core Technologies:</span>
-                          <p className="font-semibold text-white mt-0.5 truncate" title={jdSpec.core_skills.join(", ")}>
-                            {jdSpec.core_skills.slice(0, 3).join(", ")}...
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">Locations:</span>
-                          <p className="font-semibold text-white mt-0.5 truncate">{jdSpec.preferred_locations.slice(0, 2).join(", ")}</p>
+                        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 flex items-center gap-4">
+                          <div className="bg-rose-500/10 text-rose-400 p-3 rounded-lg border border-rose-500/20">
+                            <AlertTriangle className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <span className="text-xs text-slate-400 block">Honeypots Detected</span>
+                            <p className="text-2xl font-bold text-rose-400 mt-0.5">{stats.sample_honeypot_ratio}% rate</p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Start Evaluation Block */}
-                  <div className="flex justify-end pt-2">
-                    <button
-                      onClick={handleStartRanking}
-                      disabled={!jdUploaded || !candidatesUploaded || isRanking}
-                      className={`px-6 py-3 rounded-lg text-white font-medium shadow-lg transition-all flex items-center gap-2 ${!jdUploaded || !candidatesUploaded || isRanking ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:shadow-purple-500/10 hover:scale-102 cursor-pointer'}`}
-                    >
-                      {isRanking ? 'Pipeline Evaluating...' : 'Start Candidate Discovery'}
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
+                    {/* Pre-loaded Target JD */}
+                    {jdSpec && (
+                      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
+                        <h3 className="text-base font-semibold text-white border-b border-slate-800 pb-2">
+                          Hiring Mandate: {jdSpec.title}
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-sm">
+                          <div className="bg-slate-950 p-4 rounded-lg border border-slate-850">
+                            <span className="text-slate-400 text-xs block mb-1">Experience Band</span>
+                            <span className="font-semibold text-white">{jdSpec.experience_range[0]} - {jdSpec.experience_range[1]} Years</span>
+                          </div>
+                          <div className="bg-slate-950 p-4 rounded-lg border border-slate-850">
+                            <span className="text-slate-400 text-xs block mb-1">Target Locations</span>
+                            <span className="font-semibold text-white truncate block" title={jdSpec.preferred_locations.join(", ")}>
+                              {jdSpec.preferred_locations.slice(0, 3).join(", ")}
+                            </span>
+                          </div>
+                          <div className="bg-slate-950 p-4 rounded-lg border border-slate-850 lg:col-span-2">
+                            <span className="text-slate-400 text-xs block mb-1">Core Required Skills</span>
+                            <span className="font-semibold text-purple-400 truncate block" title={jdSpec.core_skills.join(", ")}>
+                              {jdSpec.core_skills.slice(0, 5).join(", ")}...
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Navigation CTA */}
+                    <div className="p-8 rounded-xl border border-slate-800 bg-slate-900/20 text-center space-y-4">
+                      <p className="text-slate-300 text-sm max-w-xl mx-auto leading-relaxed">
+                        The ranking pipeline has evaluated the complete pool, filtered chronological honeypots, verified and discounted skill claims, and sorted candidates deterministically.
+                      </p>
+                      <div className="flex justify-center gap-4">
+                        <button
+                          onClick={() => setViewMode('leaderboard')}
+                          className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:scale-102 transition-all text-white font-medium text-sm cursor-pointer shadow-md flex items-center gap-2"
+                        >
+                          <Users className="w-4 h-4" /> View Leaderboard
+                        </button>
+                        <button
+                          onClick={() => setViewMode('analytics')}
+                          className="px-5 py-2.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-300 font-medium text-sm cursor-pointer transition-all flex items-center gap-2"
+                        >
+                          <BarChart3 className="w-4 h-4" /> View Analytics
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Custom Live Demo Upload View */
+                  <div className="space-y-8 animate-fade-in">
+                    {/* Live Demo Header */}
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-6 bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-800 rounded-xl shadow-md">
+                      <div>
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Live Custom Demo Mode
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                          Upload custom job descriptions and candidate database files to run real-time evaluations.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleResetTo100K}
+                        className="px-4 py-2 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-300 font-medium text-sm transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap self-stretch md:self-auto justify-center"
+                      >
+                        📊 Back to 100K Report
+                      </button>
+                    </div>
 
-                {/* Progress Indicators */}
-                {(isRanking || progress.status === 'done' || progress.status === 'error') && (
-                  <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-semibold text-white">Ranking Status: {progress.message}</span>
-                      <span className="text-purple-400 font-medium">{progress.percent}%</span>
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-6">
+                      <h2 className="text-lg font-semibold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
+                        <FileText className="w-5 h-5 text-purple-400" /> Upload Hiring Mandates
+                      </h2>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Job Description Upload */}
+                        <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${jdUploaded && jdFile ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-850 hover:border-purple-500/40 bg-slate-950/40'}`}>
+                          <label className="cursor-pointer block space-y-4">
+                            <input type="file" onChange={handleJdUpload} accept=".docx,.txt,.md" className="hidden" />
+                            <div className="mx-auto w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
+                              {jdUploaded && jdFile ? <CheckCircle className="w-6 h-6 text-emerald-400" /> : <FileText className="w-6 h-6 text-purple-400" />}
+                            </div>
+                            <div>
+                              <p className="font-medium text-white">{jdFile ? jdFile.name : 'Job Description'}</p>
+                              <p className="text-xs text-slate-400 mt-1">Accepts .docx, .txt, .md</p>
+                            </div>
+                          </label>
+                        </div>
+
+                        {/* Candidate Pool Upload */}
+                        <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${candidatesUploaded && candidatesFile ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-850 hover:border-purple-500/40 bg-slate-950/40'}`}>
+                          <label className="cursor-pointer block space-y-4">
+                            <input type="file" onChange={handleCandidatesUpload} accept=".json,.jsonl" className="hidden" />
+                            <div className="mx-auto w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
+                              {candidatesUploaded && candidatesFile ? <CheckCircle className="w-6 h-6 text-emerald-400" /> : <Users className="w-6 h-6 text-purple-400" />}
+                            </div>
+                            <div>
+                              <p className="font-medium text-white">{candidatesFile ? candidatesFile.name : 'Candidate Database'}</p>
+                              <p className="text-xs text-slate-400 mt-1">
+                                {candidatesUploaded && candidatesFile ? `Loaded ${candidateCount.toLocaleString()} candidates` : 'Accepts .json, .jsonl (100K Pool)'}
+                              </p>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+
+                      {/* Summary of uploaded items */}
+                      {jdUploaded && jdSpec && (
+                        <div className="bg-slate-950/80 border border-slate-850 rounded-lg p-4 space-y-3">
+                          <p className="text-sm font-semibold text-white">Parsed Target Role:</p>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                            <div>
+                              <span className="text-slate-400">Target Role:</span>
+                              <p className="font-semibold text-purple-400 mt-0.5">{jdSpec.title}</p>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Experience Range:</span>
+                              <p className="font-semibold text-white mt-0.5">{jdSpec.experience_range[0]} - {jdSpec.experience_range[1]} Years</p>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Core Technologies:</span>
+                              <p className="font-semibold text-white mt-0.5 truncate" title={jdSpec.core_skills.join(", ")}>
+                                {jdSpec.core_skills.slice(0, 3).join(", ")}...
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Locations:</span>
+                              <p className="font-semibold text-white mt-0.5 truncate">{jdSpec.preferred_locations.slice(0, 2).join(", ")}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Start Evaluation Block */}
+                      <div className="flex justify-end pt-2">
+                        <button
+                          onClick={handleStartRanking}
+                          disabled={!jdUploaded || !candidatesUploaded || isRanking}
+                          className={`px-6 py-3 rounded-lg text-white font-medium shadow-lg transition-all flex items-center gap-2 ${!jdUploaded || !candidatesUploaded || isRanking ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none' : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:shadow-purple-500/10 hover:scale-102 cursor-pointer'}`}
+                        >
+                          {isRanking ? 'Pipeline Evaluating...' : 'Start Candidate Discovery'}
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
-                      <div 
-                        className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full rounded-full transition-all duration-500" 
-                        style={{ width: `${progress.percent}%` }}
-                      ></div>
-                    </div>
+
+                    {/* Progress Indicators */}
+                    {(isRanking || progress.status === 'running' || progress.status === 'done' || progress.status === 'error') && (
+                      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-4">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-semibold text-white">Ranking Status: {progress.message}</span>
+                          <span className="text-purple-400 font-medium">{progress.percent}%</span>
+                        </div>
+                        <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                          <div 
+                            className="bg-gradient-to-r from-purple-600 to-indigo-600 h-full rounded-full transition-all duration-500" 
+                            style={{ width: `${progress.percent}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Step 2: Weights configuration */}
+              {/* Right Column: Weights configuration */}
               <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-6 space-y-6">
                 <h2 className="text-lg font-semibold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
                   <Settings className="w-5 h-5 text-purple-400" /> Config Scoring weights
                 </h2>
                 
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Customize the score weight distribution. Modifying weights will instantly update scores and ranks across the system.
+                  {isDemoMode 
+                    ? "Customize the score weight distribution. Modifying weights will instantly update scores and ranks across the system."
+                    : "These are the weights used for scoring the official 100K Candidate Pool. Switch to Live Custom Demo to edit them."}
                 </p>
 
-                <div className="space-y-6">
+                <div className={`space-y-6 ${!isDemoMode ? 'opacity-50 pointer-events-none' : ''}`}>
                   {/* Tech Match Slider */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-semibold">
