@@ -125,31 +125,35 @@ async def upload_candidates(file: UploadFile = File(...)):
     CURRENT_STATE["candidates"] = []
     CURRENT_STATE["ranked_results"] = []
     
-    # Read file line-by-line
-    content = await file.read()
-    lines = content.decode("utf-8").splitlines()
-    
     candidates_list = []
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            # Handle both JSON array elements and JSONL lines
-            if line.startswith("[") or line.startswith(","):
-                # Clean up if it's a JSON array
-                clean_line = line.strip().lstrip("[").rstrip("]").rstrip(",")
-                if not clean_line:
-                    continue
-                candidates_list.append(json.loads(clean_line))
-            else:
-                candidates_list.append(json.loads(line))
-        except Exception:
-            # If it's a full JSON array file, we try to load the whole thing
+    try:
+        # Stream line-by-line from the file object to optimize memory usage
+        for line_bytes in file.file:
+            line = line_bytes.decode("utf-8").strip()
+            if not line:
+                continue
             try:
-                candidates_list = json.loads(content.decode("utf-8"))
-                break
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Failed to parse candidates data: {str(e)}")
+                # Handle both JSON array elements and JSONL lines
+                if line.startswith("[") or line.startswith(","):
+                    clean_line = line.lstrip("[").rstrip("]").rstrip(",")
+                    if not clean_line:
+                        continue
+                    candidates_list.append(json.loads(clean_line))
+                else:
+                    candidates_list.append(json.loads(line))
+            except Exception:
+                # If a single line fails to parse, it could be a full JSON array file
+                # We raise an error so the fallback block below handles it
+                raise ValueError("Line parsing failed")
+    except Exception:
+        # Fallback: If line-by-line streaming failed or it's a formatted JSON array file,
+        # try loading the entire file as a single JSON object.
+        try:
+            file.file.seek(0)
+            content = file.file.read()
+            candidates_list = json.loads(content.decode("utf-8"))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse candidates data: {str(e)}")
                 
     CURRENT_STATE["candidates"] = candidates_list
     return {
