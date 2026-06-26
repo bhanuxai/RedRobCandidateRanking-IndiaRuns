@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  candidate-discovery:
+    build: .
+    container_name: redrob-candidate-discovery
+    ports:
+      - "8000:7860"
+    volumes:
+      - ./Dataset:/app/Dataset
+      - ./submission.csv:/app/submission.csv
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
