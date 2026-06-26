@@ -1,3 +1,13 @@
+---
+title: Redrob AI Candidate Intelligence
+emoji: 🧠
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Redrob AI Candidate Intelligence Engine
 
 This repository contains a production-quality, multi-agent recruitment intelligence platform built for the **Redrob Intelligent Candidate Discovery & Ranking Hackathon**. It evaluates candidate fit against a job description using recruiter-intent alignment rather than naive keyword matching.
