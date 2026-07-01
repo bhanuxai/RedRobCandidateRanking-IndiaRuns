@@ -1,0 +1,17 @@
+# Datasets
+Dataset/candidates.jsonl
+
+# Temporary and build files
+temp/
+backend/temp/
+submission.csv
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Node/Frontend
+frontend/node_modules/
+.env
+.DS_Store
