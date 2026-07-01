@@ -1,3 +1,13 @@
+---
+title: Redrob AI Candidate Intelligence
+emoji: 🧠
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🧠 Redrob AI Candidate Intelligence Engine
 
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A5%97%20Hugging%20Face-Space-blue)](https://huggingface.co/spaces/BhanuXai/redrob-ai-candidate-intelligence)
