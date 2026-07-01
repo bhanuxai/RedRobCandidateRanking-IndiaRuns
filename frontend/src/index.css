@@ -1,8 +1,0 @@
-@import "tailwindcss";
-
-/* Custom scrollbars and styling tweaks */
-@layer base {
-  body {
-    @apply bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-purple-500 selection:text-white;
-  }
-}
