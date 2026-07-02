@@ -15,7 +15,8 @@ import {
   Clock,
   Briefcase,
   X,
-  Compass
+  Compass,
+  Loader2
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -40,6 +41,8 @@ export default function App() {
   const [candidatesFile, setCandidatesFile] = useState<File | null>(null);
   const [jdUploaded, setJdUploaded] = useState(false);
   const [candidatesUploaded, setCandidatesUploaded] = useState(false);
+  const [isUploadingJd, setIsUploadingJd] = useState(false);
+  const [isUploadingCandidates, setIsUploadingCandidates] = useState(false);
   const [candidateCount, setCandidateCount] = useState(0);
   const [jdSpec, setJdSpec] = useState<any>(null);
   const [weights, setWeights] = useState({
@@ -219,6 +222,8 @@ export default function App() {
     if (!e.target.files?.[0]) return;
     const file = e.target.files[0];
     setJdFile(file);
+    setIsUploadingJd(true);
+    setJdUploaded(false);
     
     const formData = new FormData();
     formData.append("file", file);
@@ -237,6 +242,9 @@ export default function App() {
       setJdUploaded(true);
     } catch (err: any) {
       alert(err.message || "Failed to upload job description");
+      setJdFile(null);
+    } finally {
+      setIsUploadingJd(false);
     }
   };
 
@@ -244,6 +252,8 @@ export default function App() {
     if (!e.target.files?.[0]) return;
     const file = e.target.files[0];
     setCandidatesFile(file);
+    setIsUploadingCandidates(true);
+    setCandidatesUploaded(false);
     
     const formData = new FormData();
     formData.append("file", file);
@@ -262,6 +272,9 @@ export default function App() {
       setCandidatesUploaded(true);
     } catch (err: any) {
       alert(err.message || "Failed to upload candidate dataset");
+      setCandidatesFile(null);
+    } finally {
+      setIsUploadingCandidates(false);
     }
   };
 
@@ -535,30 +548,44 @@ export default function App() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Job Description Upload */}
-                        <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${jdUploaded && jdFile ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-850 hover:border-purple-500/40 bg-slate-950/40'}`}>
+                        <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${jdUploaded && jdFile ? 'border-emerald-500/40 bg-emerald-500/5' : isUploadingJd ? 'border-purple-500/40 bg-purple-500/5 animate-pulse' : 'border-slate-855 hover:border-purple-500/40 bg-slate-950/40'}`}>
                           <label className="cursor-pointer block space-y-4">
-                            <input type="file" onChange={handleJdUpload} accept=".docx,.txt,.md" className="hidden" />
+                            <input type="file" onChange={handleJdUpload} accept=".docx,.txt,.md" className="hidden" disabled={isUploadingJd} />
                             <div className="mx-auto w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
-                              {jdUploaded && jdFile ? <CheckCircle className="w-6 h-6 text-emerald-400" /> : <FileText className="w-6 h-6 text-purple-400" />}
+                              {isUploadingJd ? (
+                                <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+                              ) : jdUploaded && jdFile ? (
+                                <CheckCircle className="w-6 h-6 text-emerald-400" />
+                              ) : (
+                                <FileText className="w-6 h-6 text-purple-400" />
+                              )}
                             </div>
                             <div>
-                              <p className="font-medium text-white">{jdFile ? jdFile.name : 'Job Description'}</p>
-                              <p className="text-xs text-slate-400 mt-1">Accepts .docx, .txt, .md</p>
+                              <p className="font-medium text-white">{isUploadingJd ? 'Uploading Mandates...' : jdFile ? jdFile.name : 'Job Description'}</p>
+                              <p className="text-xs text-slate-400 mt-1">
+                                {isUploadingJd ? 'Parsing and analyzing job specs...' : 'Accepts .docx, .txt, .md'}
+                              </p>
                             </div>
                           </label>
                         </div>
 
                         {/* Candidate Pool Upload */}
-                        <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${candidatesUploaded && candidatesFile ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-slate-850 hover:border-purple-500/40 bg-slate-950/40'}`}>
+                        <div className={`border-2 border-dashed rounded-lg p-6 text-center transition-all ${candidatesUploaded && candidatesFile ? 'border-emerald-500/40 bg-emerald-500/5' : isUploadingCandidates ? 'border-purple-500/40 bg-purple-500/5 animate-pulse' : 'border-slate-855 hover:border-purple-500/40 bg-slate-950/40'}`}>
                           <label className="cursor-pointer block space-y-4">
-                            <input type="file" onChange={handleCandidatesUpload} accept=".json,.jsonl" className="hidden" />
+                            <input type="file" onChange={handleCandidatesUpload} accept=".json,.jsonl" className="hidden" disabled={isUploadingCandidates} />
                             <div className="mx-auto w-12 h-12 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400">
-                              {candidatesUploaded && candidatesFile ? <CheckCircle className="w-6 h-6 text-emerald-400" /> : <Users className="w-6 h-6 text-purple-400" />}
+                              {isUploadingCandidates ? (
+                                <Loader2 className="w-6 h-6 text-purple-400 animate-spin" />
+                              ) : candidatesUploaded && candidatesFile ? (
+                                <CheckCircle className="w-6 h-6 text-emerald-400" />
+                              ) : (
+                                <Users className="w-6 h-6 text-purple-400" />
+                              )}
                             </div>
                             <div>
-                              <p className="font-medium text-white">{candidatesFile ? candidatesFile.name : 'Candidate Database'}</p>
+                              <p className="font-medium text-white">{isUploadingCandidates ? 'Uploading Dataset...' : candidatesFile ? candidatesFile.name : 'Candidate Database'}</p>
                               <p className="text-xs text-slate-400 mt-1">
-                                {candidatesUploaded && candidatesFile ? `Loaded ${candidateCount.toLocaleString()} candidates` : 'Accepts .json, .jsonl (100K Pool)'}
+                                {isUploadingCandidates ? 'Loading candidates database...' : candidatesUploaded && candidatesFile ? `Loaded ${candidateCount.toLocaleString()} candidates` : 'Accepts .json, .jsonl (100K Pool)'}
                               </p>
                             </div>
                           </label>
