@@ -381,6 +381,35 @@ def get_stats():
         "skills": sorted([{"name": k, "count": v} for k, v in skills_dist.items()], key=lambda x: -x["count"])[:10]
     }
 
+@app.get("/api/precalculated/leaderboard")
+def get_precalculated_leaderboard():
+    initial_ranked_results, _ = load_precalculated_data()
+    leaderboard = []
+    for item in initial_ranked_results:
+        leaderboard.append({
+            "rank": item["rank"],
+            "candidate_id": item["candidate_id"],
+            "name": item["profile"]["name"],
+            "title": item["profile"]["current_title"],
+            "company": item["profile"]["current_company"],
+            "years_of_experience": item["profile"]["years_of_experience"],
+            "score": item["scores"]["final_score"],
+            "reasoning": item["reasoning"]
+        })
+    return leaderboard
+
+@app.get("/api/precalculated/stats")
+def get_precalculated_stats():
+    _, initial_stats = load_precalculated_data()
+    return initial_stats
+
+@app.get("/api/precalculated/jd")
+def get_precalculated_jd():
+    return {
+        "jd_text": DEFAULT_JD_TEXT,
+        "jd_spec": JobIntelligenceAgent().analyze_jd(DEFAULT_JD_TEXT) if DEFAULT_JD_TEXT else {}
+    }
+
 @app.get("/api/leaderboard")
 def get_leaderboard():
     if not CURRENT_STATE["ranked_results"]:

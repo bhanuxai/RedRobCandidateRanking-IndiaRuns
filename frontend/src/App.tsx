@@ -61,6 +61,40 @@ export default function App() {
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [compareDetails, setCompareDetails] = useState<any[]>([]);
 
+  const loadPrecalculated100K = () => {
+    setIsDemoMode(false);
+    
+    fetch(`${API_BASE}/precalculated/jd`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.jd_spec) {
+          setJdSpec(data.jd_spec);
+          setJdUploaded(true);
+        }
+      })
+      .catch(err => console.error("Error fetching precalculated JD:", err));
+      
+    fetch(`${API_BASE}/precalculated/leaderboard`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.length > 0) {
+          setLeaderboard(data);
+        }
+      })
+      .catch(err => console.error("Error fetching precalculated leaderboard:", err));
+      
+    fetch(`${API_BASE}/precalculated/stats`)
+      .then(res => res.json())
+      .then(data => {
+        if (data) {
+          setStats(data);
+          setCandidateCount(data.total_candidates);
+          setCandidatesUploaded(true);
+        }
+      })
+      .catch(err => console.error("Error fetching precalculated stats:", err));
+  };
+
   // Load configuration weights and initial leaderboard/stats/jd from API on startup
   useEffect(() => {
     // 1. Fetch weights config
@@ -69,44 +103,8 @@ export default function App() {
       .then(data => setWeights(data))
       .catch(err => console.error("Error fetching config:", err));
 
-    // 2. Fetch preloaded JD
-    fetch(`${API_BASE}/jd`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.jd_spec && data.jd_spec.title) {
-          setJdSpec(data.jd_spec);
-          setJdUploaded(true);
-        }
-      })
-      .catch(err => console.error("Error fetching JD:", err));
-
-    // 3. Fetch preloaded leaderboard
-    fetch(`${API_BASE}/leaderboard`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.length > 0) {
-          setLeaderboard(data);
-        }
-      })
-      .catch(err => console.error("Error fetching leaderboard:", err));
-
-    // 4. Fetch preloaded stats
-    fetch(`${API_BASE}/stats`)
-      .then(res => res.json())
-      .then(data => {
-        if (data) {
-          setStats(data);
-          setCandidateCount(data.total_candidates);
-          setCandidatesUploaded(true);
-          setIsDemoMode(false); // Start on precalculated 100K view
-        } else {
-          setIsDemoMode(true);
-        }
-      })
-      .catch(err => {
-        console.error("Error fetching stats:", err);
-        setIsDemoMode(true);
-      });
+    // Load precalculated 100K report by default on startup
+    loadPrecalculated100K();
   }, []);
 
   // Poll progress if ranking is active
@@ -181,36 +179,7 @@ export default function App() {
       
       setJdFile(null);
       setCandidatesFile(null);
-      setIsDemoMode(false);
-      
-      // Fetch JD
-      const jdRes = await fetch(`${API_BASE}/jd`);
-      const jdData = await jdRes.json();
-      if (jdData && jdData.jd_spec && jdData.jd_spec.title) {
-        setJdSpec(jdData.jd_spec);
-        setJdUploaded(true);
-      } else {
-        setJdSpec(null);
-        setJdUploaded(false);
-      }
-
-      // Fetch stats
-      const statsRes = await fetch(`${API_BASE}/stats`);
-      const statsData = await statsRes.json();
-      if (statsData) {
-        setStats(statsData);
-        setCandidateCount(statsData.total_candidates);
-        setCandidatesUploaded(true);
-      } else {
-        setStats(null);
-        setCandidateCount(0);
-        setCandidatesUploaded(false);
-      }
-
-      // Fetch leaderboard
-      const lbRes = await fetch(`${API_BASE}/leaderboard`);
-      const lbData = await lbRes.json();
-      setLeaderboard(lbData || []);
+      loadPrecalculated100K();
       
       alert("Reset to official 100K candidates report successfully!");
     } catch (err) {
@@ -498,26 +467,48 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Navigation CTA */}
-                    <div className="p-8 rounded-xl border border-slate-800 bg-slate-900/20 text-center space-y-4">
-                      <p className="text-slate-300 text-sm max-w-xl mx-auto leading-relaxed">
-                        The ranking pipeline has evaluated the complete pool, filtered chronological honeypots, verified and discounted skill claims, and sorted candidates deterministically.
-                      </p>
-                      <div className="flex justify-center gap-4">
-                        <button
-                          onClick={() => setViewMode('leaderboard')}
-                          className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:scale-102 transition-all text-white font-medium text-sm cursor-pointer shadow-md flex items-center gap-2"
-                        >
-                          <Users className="w-4 h-4" /> View Leaderboard
-                        </button>
-                        <button
-                          onClick={() => setViewMode('analytics')}
-                          className="px-5 py-2.5 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-900 text-slate-300 font-medium text-sm cursor-pointer transition-all flex items-center gap-2"
-                        >
-                          <BarChart3 className="w-4 h-4" /> View Analytics
-                        </button>
+                    {/* Top Candidates Preview */}
+                    {leaderboard && leaderboard.length > 0 && (
+                      <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden p-6 space-y-4">
+                        <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                          <Users className="w-5 h-5 text-purple-400" /> Top Ranked Candidates Preview (100K Pool)
+                        </h3>
+                        <div className="overflow-x-auto border border-slate-800 rounded-lg">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-850 bg-slate-900/40 text-xs font-semibold uppercase text-slate-400">
+                                <th className="px-6 py-3 w-16">Rank</th>
+                                <th className="px-6 py-3">Candidate ID</th>
+                                <th className="px-6 py-3">Name</th>
+                                <th className="px-6 py-3">Role / Company</th>
+                                <th className="px-6 py-3 text-center">Score</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-850 text-sm">
+                              {leaderboard.slice(0, 5).map((item) => (
+                                <tr key={item.candidate_id} className="hover:bg-slate-900/30 transition-all">
+                                  <td className="px-6 py-3 font-bold text-white text-base">{item.rank}</td>
+                                  <td className="px-6 py-3 font-mono text-slate-400 text-xs">{item.candidate_id}</td>
+                                  <td className="px-6 py-3 font-semibold text-white">{item.name}</td>
+                                  <td className="px-6 py-3 text-slate-400 text-xs max-w-xs truncate">
+                                    {item.title} at <span className="text-white">{item.company}</span>
+                                  </td>
+                                  <td className="px-6 py-3 text-center font-bold text-emerald-400">{item.score.toFixed(4)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="flex justify-center pt-2">
+                          <button
+                            onClick={() => setViewMode('leaderboard')}
+                            className="px-5 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:scale-102 transition-all text-white font-medium text-sm cursor-pointer shadow-md flex items-center gap-2"
+                          >
+                            View Leaderboard (Show All) <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 ) : (
                   /* Custom Live Demo Upload View */
