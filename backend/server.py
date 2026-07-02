@@ -462,6 +462,9 @@ def download_csv():
 
 # Serve React static assets
 frontend_dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+root_dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dist")
 if os.path.exists(frontend_dist_path):
     app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="static")
+elif os.path.exists(root_dist_path):
+    app.mount("/", StaticFiles(directory=root_dist_path, html=True), name="static")
 
