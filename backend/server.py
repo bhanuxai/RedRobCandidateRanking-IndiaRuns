@@ -267,8 +267,10 @@ def run_ranking_in_memory():
     reasoning_agent = ReasoningAgent()
     
     candidates_scored = []
+    total = len(candidates)
+    update_interval = max(1, total // 10)
     
-    for c in candidates:
+    for idx, c in enumerate(candidates):
         profile = profile_agent.normalize(c)
         risk_data = honeypot_agent.detect_risk(profile)
         career_data = career_agent.analyze_career(profile)
@@ -294,9 +296,22 @@ def run_ranking_in_memory():
             "risk_data": risk_data
         })
         
+        if (idx + 1) % update_interval == 0 or (idx + 1) == total:
+            percent = 10 + int(75 * (idx + 1) / total)
+            CURRENT_STATE["progress"] = {
+                "status": "running",
+                "percent": percent,
+                "message": f"Scoring candidates ({idx + 1}/{total})..."
+            }
+        
     top_100 = ranking_agent.rank_candidates(candidates_scored)
     
     # Generate explanations
+    CURRENT_STATE["progress"] = {
+        "status": "running",
+        "percent": 90,
+        "message": "Generating explanations for top 100..."
+    }
     for item in top_100:
         reasoning = reasoning_agent.generate_reasoning(
             profile=item["profile"],
@@ -442,22 +457,24 @@ def download_csv():
     if not CURRENT_STATE["ranked_results"]:
         raise HTTPException(status_code=400, detail="No ranking results available. Run ranking first.")
         
-    csv_path = os.path.join(TEMP_DIR, "export_submission.csv")
-    with open(csv_path, "w", encoding="utf-8", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(["candidate_id", "rank", "score", "reasoning"])
-        for item in CURRENT_STATE["ranked_results"]:
-            writer.writerow([
-                item["candidate_id"],
-                item["rank"],
-                f"{item['scores']['final_score']:.4f}",
-                item["reasoning"]
-            ])
+    import pandas as pd
+    excel_path = os.path.join(TEMP_DIR, "export_submission.xlsx")
+    
+    data = []
+    for item in CURRENT_STATE["ranked_results"]:
+        data.append({
+            "candidate_id": item["candidate_id"],
+            "rank": item["rank"],
+            "score": round(item["scores"]["final_score"], 4),
+            "reasoning": item["reasoning"]
+        })
+    df = pd.DataFrame(data)
+    df.to_excel(excel_path, index=False)
             
     return FileResponse(
-        path=csv_path,
-        filename="submission.csv",
-        media_type="text/csv"
+        path=excel_path,
+        filename="TeamBrahmastra_IndiaRunsRedRobAI.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 # Serve React static assets
