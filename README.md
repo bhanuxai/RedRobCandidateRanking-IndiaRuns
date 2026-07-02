@@ -100,8 +100,14 @@ Our Honeypot Agent uses exact chronological checks to detect fake profiles, assi
 3. Build the frontend React assets:
    ```bash
    cd frontend
+   ```
+   ```bash
    npm install
+   ```
+   ```bash
    npm run build
+   ```
+   ```bash
    cd ..
    ```
 
