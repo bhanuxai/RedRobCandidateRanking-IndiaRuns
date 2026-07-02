@@ -179,22 +179,33 @@ def reset_to_precalculated():
 
 @app.post("/api/upload-candidates")
 async def upload_candidates(file: UploadFile = File(...)):
-    filename = file.filename
-    
     # Reset candidates and clear precalculated stats
     CURRENT_STATE["candidates"] = []
     CURRENT_STATE["ranked_results"] = []
     CURRENT_STATE["stats"] = None
     
-    candidates_list = []
     try:
-        # Stream line-by-line from the file object to optimize memory usage
-        for line_bytes in file.file:
-            line = line_bytes.decode("utf-8").strip()
-            if not line:
-                continue
+        content = await file.read()
+        decoded_content = content.decode("utf-8")
+        
+        candidates_list = []
+        is_jsonl = True
+        
+        # Check if it looks like a standard JSON array
+        stripped = decoded_content.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
             try:
-                # Handle both JSON array elements and JSONL lines
+                candidates_list = json.loads(decoded_content)
+                is_jsonl = False
+            except Exception:
+                pass
+                
+        if is_jsonl:
+            for line in decoded_content.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # Handle leading/trailing array brackets/commas if they uploaded a formatted array line-by-line
                 if line.startswith("[") or line.startswith(","):
                     clean_line = line.lstrip("[").rstrip("]").rstrip(",")
                     if not clean_line:
@@ -202,20 +213,10 @@ async def upload_candidates(file: UploadFile = File(...)):
                     candidates_list.append(json.loads(clean_line))
                 else:
                     candidates_list.append(json.loads(line))
-            except Exception:
-                # If a single line fails to parse, it could be a full JSON array file
-                # We raise an error so the fallback block below handles it
-                raise ValueError("Line parsing failed")
-    except Exception:
-        # Fallback: If line-by-line streaming failed or it's a formatted JSON array file,
-        # try loading the entire file as a single JSON object.
-        try:
-            file.file.seek(0)
-            content = file.file.read()
-            candidates_list = json.loads(content.decode("utf-8"))
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to parse candidates data: {str(e)}")
-                
+                    
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse candidates data: {str(e)}")
+        
     CURRENT_STATE["candidates"] = candidates_list
     return {
         "message": f"Successfully uploaded {len(candidates_list)} candidates",
@@ -235,9 +236,24 @@ def trigger_ranking():
     try:
         run_ranking_in_memory()
         CURRENT_STATE["progress"] = {"status": "done", "percent": 100, "message": "Ranking completed"}
+        
+        # Mapped leaderboard representation to match /api/leaderboard structure
+        leaderboard = []
+        for item in CURRENT_STATE["ranked_results"]:
+            leaderboard.append({
+                "rank": item["rank"],
+                "candidate_id": item["candidate_id"],
+                "name": item["profile"]["name"],
+                "title": item["profile"]["current_title"],
+                "company": item["profile"]["current_company"],
+                "years_of_experience": item["profile"]["years_of_experience"],
+                "score": item["scores"]["final_score"],
+                "reasoning": item["reasoning"]
+            })
+            
         return {
             "message": "Ranking complete",
-            "top_100": CURRENT_STATE["ranked_results"][:100],
+            "top_100": leaderboard,
             "stats": get_stats()
         }
     except Exception as e:
